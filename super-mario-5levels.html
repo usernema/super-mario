@@ -5,34 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>超级马里奥 - 5关卡</title>
     <style>
-        body {
-            background: #1a1a2e;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            font-family: monospace;
-        }
+        body { background: #1a1a2e; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: monospace; }
         #gameContainer { position: relative; border: 4px solid #fff; }
         canvas { display: block; background: #5C94FC; }
-        #ui {
-            position: absolute; top: 0; left: 0; right: 0;
-            padding: 10px 20px; display: flex; justify-content: space-between;
-            color: white; font-size: 16px; text-shadow: 2px 2px 0 #000;
-            background: rgba(0,0,0,0.5);
-        }
-        #screens > div {
-            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.9); display: none;
-            flex-direction: column; align-items: center; justify-content: center;
-            color: white;
-        }
+        #ui { position: absolute; top: 0; left: 0; right: 0; padding: 10px 20px; display: flex; justify-content: space-between; color: white; font-size: 16px; text-shadow: 2px 2px 0 #000; background: rgba(0,0,0,0.5); }
+        #screens > div { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; color: white; }
         #screens > div.active { display: flex; }
-        button {
-            padding: 15px 30px; font-size: 18px; cursor: pointer;
-            background: #ff0000; color: white; border: none; margin: 10px;
-        }
+        button { padding: 15px 30px; font-size: 18px; cursor: pointer; background: #ff0000; color: white; border: none; margin: 10px; }
         h1 { color: #FFD700; text-shadow: 3px 3px #ff0000; }
     </style>
 </head>
@@ -50,15 +29,8 @@
                 <p>5 关卡完整版</p>
                 <button onclick="startGame()">开始</button>
             </div>
-            <div id="levelComplete">
-                <h2>关卡完成!</h2>
-                <button onclick="nextLevel()">下一关</button>
-            </div>
-            <div id="gameComplete">
-                <h2>🎉 通关! 🎉</h2>
-                <p>最终分数: <span id="finalScore">0</span></p>
-                <button onclick="restartGame()">重来</button>
-            </div>
+            <div id="levelComplete"><h2>关卡完成!</h2><button onclick="nextLevel()">下一关</button></div>
+            <div id="gameComplete"><h2>🎉 通关! 🎉</h2><p>最终分数: <span id="finalScore">0</span></p><button onclick="restartGame()">重来</button></div>
         </div>
     </div>
 
@@ -67,7 +39,8 @@
     const ctx = c.getContext('2d');
     
     let state = 'start', level = 1, score = 0, lives = 3;
-    let player = { x: 50, y: 300, w: 28, h: 32, vx: 0, vy: 0, g: 0.5, grounded: false, f: 1 };
+    // 玩家碰撞箱: 24x28, 比贴图稍小, 底部留2px余量
+    let player = { x: 50, y: 300, w: 24, h: 28, vx: 0, vy: 0, g: 0.55, grounded: false, f: 1 };
     let camera = { x: 0 };
     let platforms = [], coins = [], enemies = [], pipes = [], blocks = [], flag = null;
     let keys = {};
@@ -123,20 +96,23 @@
         ctx.fillStyle='#FFEE88'; ctx.beginPath(); ctx.arc(x+5,c.y+5+b,3,0,Math.PI*2); ctx.fill();
     }
     
+    // 敌人碰撞箱: 24x24 (比贴图小, 更宽容)
     function drawEnemy(e) {
         if(e.dead) return;
         const x = e.x - camera.x;
         if(x<-30||x>c.width+30) return;
         if(e.t=='g') {
-            ctx.fillStyle='#CC6600'; ctx.beginPath(); ctx.arc(x+14,e.y+12,12,Math.PI,0); ctx.fill();
-            ctx.fillStyle='#8B4513'; ctx.beginPath(); ctx.arc(x+14,e.y+12,14,Math.PI,0); ctx.fill();
-            ctx.fillStyle='#FFF'; ctx.beginPath(); ctx.arc(x+8,e.y+6,3,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle='#000'; ctx.fillRect(x+8,e.y+10,4,4); ctx.fillRect(x+16,e.y+10,4,4); ctx.fillRect(x+10,e.y+18,8,2);
+            // 蘑菇敌人 - 贴图28x28, 碰撞箱24x24居中
+            ctx.fillStyle='#CC6600'; ctx.beginPath(); ctx.arc(x+14,e.y+10,12,Math.PI,0); ctx.fill();
+            ctx.fillStyle='#8B4513'; ctx.beginPath(); ctx.arc(x+14,e.y+10,14,Math.PI,0); ctx.fill();
+            ctx.fillStyle='#FFF'; ctx.beginPath(); ctx.arc(x+8,e.y+4,3,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#000'; ctx.fillRect(x+8,e.y+8,4,4); ctx.fillRect(x+16,e.y+8,4,4); ctx.fillRect(x+10,e.y+16,8,2);
         } else {
-            ctx.fillStyle='#006400'; ctx.beginPath(); ctx.arc(x+16,e.y+14,14,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle='#00AA00'; ctx.beginPath(); ctx.arc(x+16,e.y+14,10,0,Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(x+28,e.y+8,8,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle='#000'; ctx.fillRect(x+26,e.y+6,3,3); ctx.fillRect(x+32,e.y+6,3,3);
+            // 乌龟 - 贴图32x28, 碰撞箱24x24
+            ctx.fillStyle='#006400'; ctx.beginPath(); ctx.arc(x+16,e.y+12,14,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#00AA00'; ctx.beginPath(); ctx.arc(x+16,e.y+12,10,0,Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x+28,e.y+6,8,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#000'; ctx.fillRect(x+26,e.y+4,3,3); ctx.fillRect(x+32,e.y+4,3,3);
         }
     }
     
@@ -170,65 +146,108 @@
         }
     }
     
+    // 马里奥: 贴图24x32, 碰撞箱24x28 (底部留4px)
     function drawMario() {
         const {x,y,f} = player;
-        ctx.save(); ctx.translate(x+14,y); ctx.scale(f,1); ctx.translate(-14,0);
-        ctx.fillStyle='#E70012'; ctx.fillRect(4,8,20,16); ctx.fillRect(6,0,16,12);
-        ctx.fillStyle='#0044BD'; ctx.fillRect(4,0,20,4); ctx.fillRect(2,4,4,4);
-        ctx.fillStyle='#FFCC99'; ctx.fillRect(8,4,12,8);
-        ctx.fillStyle='#000'; ctx.fillRect(14,6,3,3);
-        ctx.fillStyle='#FFCC99'; ctx.fillRect(18,8,3,3);
-        ctx.fillStyle='#0044BD'; ctx.fillRect(6,20,16,12);
-        ctx.fillStyle='#0033AD'; ctx.fillRect(8,20,3,12); ctx.fillRect(17,20,3,12);
-        ctx.fillStyle='#FFCC00'; ctx.fillRect(10,22,3,3); ctx.fillRect(15,22,3,3);
+        ctx.save(); 
+        ctx.translate(x+12,y); 
+        ctx.scale(f,1); 
+        ctx.translate(-12,0);
+        // 身体
+        ctx.fillStyle='#E70012'; ctx.fillRect(2,10,20,14);
+        // 头
+        ctx.fillStyle='#E70012'; ctx.fillRect(4,2,16,10);
+        // 帽子
+        ctx.fillStyle='#0044BD'; ctx.fillRect(2,2,20,4); ctx.fillRect(0,6,4,3);
+        // 脸
+        ctx.fillStyle='#FFCC99'; ctx.fillRect(6,6,12,6);
+        // 眼
+        ctx.fillStyle='#000'; ctx.fillRect(12,7,3,3);
+        // 鼻子
+        ctx.fillStyle='#FFCC99'; ctx.fillRect(15,9,2,2);
+        // 背带裤
+        ctx.fillStyle='#0044BD'; ctx.fillRect(4,20,16,10);
+        ctx.fillStyle='#0033AD'; ctx.fillRect(6,20,3,10); ctx.fillRect(15,20,3,10);
+        // 扣子
+        ctx.fillStyle='#FFCC00'; ctx.fillRect(8,22,3,3); ctx.fillRect(13,22,3,3);
+        // 腿
         ctx.fillStyle='#0044BD';
         const w = Math.floor(Date.now()/200)%2;
-        ctx.fillRect(6,32,6,4); ctx.fillRect(16,32,6,4);
+        if(player.grounded && Math.abs(player.vx)>0.5) {
+            ctx.fillRect(w?4:6,30,6,4); ctx.fillRect(w?14:12,30,6,4);
+        } else {
+            ctx.fillRect(4,30,6,4); ctx.fillRect(14,30,6,4);
+        }
         ctx.restore();
     }
     
     function update() {
         if(state!='playing') return;
         
+        // 水平移动
         if(keys['ArrowLeft']||keys['a']) { player.vx=-5; player.f=-1; }
         else if(keys['ArrowRight']||keys['d']) { player.vx=5; player.f=1; }
         else player.vx*=0.85;
         
+        // 跳跃
         if((keys[' ']||keys['ArrowUp']||keys['w'])&&player.grounded) { player.vy=-13; player.grounded=false; }
         
+        // 物理
         player.vy+=player.g;
         player.x+=player.vx;
         player.y+=player.vy;
         if(player.x<0) player.x=0;
         
+        // 平台碰撞 - 只检测脚下,更宽容
         player.grounded=false;
         for(let p of platforms) {
-            if(player.x+player.w>p.x && player.x<p.x+p.w && player.y+player.h>p.y && player.y+player.h<p.y+p.h+15 && player.vy>=0) {
-                player.y=p.y-player.h; player.vy=0; player.grounded=true;
+            // 玩家底部 vs 平台顶部
+            if(player.x+player.w>p.x && player.x<p.x+p.w && 
+               player.y+player.h>=p.y && player.y+player.h<=p.y+12 && player.vy>=0) {
+                player.y=p.y-player.h;
+                player.vy=0;
+                player.grounded=true;
             }
         }
         
-        if(player.y>c.height) { lives--; document.getElementById('lives').innerText=lives; if(lives<=0) {state='start'; document.getElementById('start').classList.add('active');} else {loadLevel(level); player.x=50; player.y=300;} }
+        // 掉落
+        if(player.y>c.height) { 
+            lives--; document.getElementById('lives').innerText=lives; 
+            if(lives<=0) {state='start'; document.getElementById('start').classList.add('active');} 
+            else {loadLevel(level); player.x=50; player.y=300;} 
+        }
         
-        for(let c of coins) {
-            if(!c.col && player.x+player.w>c.x && player.x<c.x+16 && player.y+player.h>c.y && player.y<c.y+16) {
-                c.col=true; score+=100; document.getElementById('score').innerText=score;
+        // 金币 - 碰撞箱20x20更宽容
+        for(let co of coins) {
+            if(!co.col && player.x+player.w>co.x && player.x<co.x+16 && player.y+player.h>co.y && player.y<co.y+16) {
+                co.col=true; score+=100; document.getElementById('score').innerText=score;
             }
         }
         
+        // 敌人 - 碰撞箱22x22, 踩踏检测更精确
         for(let e of enemies) {
             if(e.dead) continue;
             e.x+=e.vx;
             if(e.x<e.s||e.x>e.e) e.vx*=-1;
-            if(player.x+player.w>e.x && player.x<e.x+28 && player.y+player.h>e.y && player.y<e.y+28) {
-                if(player.vy>0 && player.y+player.h<e.y+20) { player.vy=-8; e.dead=true; score+=200; document.getElementById('score').innerText=score; }
-                else { lives--; document.getElementById('lives').innerText=lives; if(lives<=0) {state='start'; document.getElementById('start').classList.add('active');} else {loadLevel(level); player.x=50; player.y=300;} }
+            
+            // 碰撞检测
+            if(player.x+player.w-2>e.x && player.x+2<e.x+24 && player.y+player.h>e.y && player.y<e.y+24) {
+                // 踩敌人: 玩家向下且在敌人上半部分
+                if(player.vy>0 && player.y+player.h<e.y+16) { 
+                    player.vy=-8; e.dead=true; score+=200; document.getElementById('score').innerText=score; 
+                }
+                else { 
+                    lives--; document.getElementById('lives').innerText=lives; 
+                    if(lives<=0) {state='start'; document.getElementById('start').classList.add('active');} 
+                    else {loadLevel(level); player.x=50; player.y=300;} 
+                }
             }
         }
         
+        // 砖块 - 头顶碰撞
         for(let b of blocks) {
             if(b.hit) continue;
-            if(player.x+player.w>b.x && player.x<b.x+30 && player.y+player.h>b.y && player.y<b.y+30 && player.vy<0) {
+            if(player.x+player.w>b.x && player.x<b.x+30 && player.y>b.y && player.y<b.y+30 && player.vy<0) {
                 b.hit=true; player.vy=5;
                 if(b.c=='c') score+=50;
                 else if(b.c=='s') { player.invincible=true; setTimeout(()=>player.invincible=false,10000); }
@@ -236,6 +255,7 @@
             }
         }
         
+        // 过关
         if(flag && player.x>flag.x-20 && player.y>flag.y-50) {
             score+=1000;
             document.getElementById('score').innerText=score;

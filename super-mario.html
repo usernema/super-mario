@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>超级马里奥</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #5C94FC;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Press Start Pro', monospace;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            border: 4px solid #000;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        canvas {
+            display: block;
+            background-color: #5C94FC;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 16px;
+            text-shadow: 2px 2px 0 #000;
+            z-index: 10;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 12px;
+            text-shadow: 1px 1px 0 #000;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="ui">
+            <div>分数: <span id="score">0</span></div>
+            <div>生命: <span id="lives">3</span></div>
+        </div>
+        <canvas id="gameCanvas" width="800" height="480"></canvas>
+        <div id="instructions">← → 移动 | 空格/↑ 跳跃</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 游戏状态
+        let score = 0;
+        let lives = 3;
+        let gameOver = false;
+        let gameWon = false;
+        
+        // 玩家
+        const player = {
+            x: 50,
+            y: 300,
+            width: 28,
+            height: 32,
+            vx: 0,
+            vy: 0,
+            speed: 5,
+            jumpPower: -14,
+            grounded: false,
+            facing: 1,
+            frame: 0,
+            frameTimer: 0
+        };
+        
+        // 物理常量
+        const gravity = 0.6;
+        const friction = 0.85;
+        
+        // 地图元素
+        const platforms = [
+            { x: 0, y: 400, w: 800, h: 80 }, // 地面
+            { x: 200, y: 320, w: 100, h: 20 },
+            { x: 350, y: 250, w: 80, h: 20 },
+            { x: 500, y: 320, w: 100, h: 20 },
+            { x: 650, y: 200, w: 80, h: 20 },
+            { x: 100, y: 180, w: 60, h: 20 },
+            { x: -50, y: 400, w: 100, h: 80 },
+            { x: 750, y: 400, w: 100, h: 80 },
+        ];
+        
+        // 金币
+        const coins = [
+            { x: 230, y: 280, collected: false },
+            { x: 380, y: 210, collected: false },
+            { x: 530, y: 280, collected: false },
+            { x: 680, y: 160, collected: false },
+            { x: 120, y: 140, collected: false },
+        ];
+        
+        // 敌人
+        const enemies = [
+            { x: 300, y: 368, w: 28, h: 28, vx: -1, startX: 250, endX: 400 },
+            { x: 550, y: 368, w: 28, h: 28, vx: -1, startX: 500, endX: 650 },
+        ];
+        
+        // 旗子
+        const flag = { x: 720, y: 320, h: 80 };
+        
+        // 按键状态
+        const keys = {
+            left: false,
+            right: false,
+            jump: false
+        };
+        
+        // 绘制像素风格角色
+        function drawMario(x, y, facing, frame) {
+            ctx.save();
+            ctx.translate(x + player.width/2, y);
+            ctx.scale(facing, 1);
+            ctx.translate(-player.width/2, 0);
+            
+            // 身体（红色）
+            ctx.fillStyle = '#E70012';
+            ctx.fillRect(4, 8, 20, 16);
+            
+            // 头（红色）
+            ctx.fillStyle = '#E70012';
+            ctx.fillRect(6, 0, 16, 12);
+            
+            // 帽子
+            ctx.fillStyle = '#0044BD';
+            ctx.fillRect(4, 0, 20, 4);
+            ctx.fillRect(2, 4, 4, 4);
+            
+            // 脸
+            ctx.fillStyle = '#FFCC99';
+            ctx.fillRect(8, 4, 12, 8);
+            
+            // 眼睛
+            ctx.fillStyle = '#000';
+            ctx.fillRect(14, 6, 3, 3);
+            
+            // 鼻子
+            ctx.fillStyle = '#FFCC99';
+            ctx.fillRect(18, 8, 3, 3);
+            
+            // 背带裤（蓝色）
+            ctx.fillStyle = '#0044BD';
+            ctx.fillRect(6, 20, 16, 12);
+            
+            // 背带
+            ctx.fillStyle = '#0033AD';
+            ctx.fillRect(8, 20, 3, 12);
+            ctx.fillRect(17, 20, 3, 12);
+            
+            // 扣子
+            ctx.fillStyle = '#FFCC00';
+            ctx.fillRect(10, 22, 3, 3);
+            ctx.fillRect(15, 22, 3, 3);
+            
+            // 腿
+            ctx.fillStyle = '#0044BD';
+            if (Math.floor(frame / 5) % 2 === 0 || !player.grounded) {
+                ctx.fillRect(6, 32, 6, 4);
+                ctx.fillRect(16, 32, 6, 4);
+            } else {
+                ctx.fillRect(4, 32, 8, 4);
+                ctx.fillRect(16, 32, 8, 4);
+            }
+            
+            ctx.restore();
+        }
+        
+        function drawPlatform(p) {
+            // 草地顶层
+            ctx.fillStyle = '#00AA00';
+            ctx.fillRect(p.x, p.y, p.w, 6);
+            
+            // 泥土
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(p.x, p.y + 6, p.w, p.h - 6);
+            
+            // 草纹理
+            ctx.fillStyle = '#00DD00';
+            for (let i = 0; i < p.w; i += 12) {
+                ctx.fillRect(p.x + i, p.y, 8, 4);
+            }
+        }
+        
+        function drawCoin(c) {
+            if (c.collected) return;
+            
+            const bounce = Math.sin(Date.now() / 150) * 2;
+            
+            // 金币
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(c.x + 8, c.y + 8 + bounce, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 光泽
+            ctx.fillStyle = '#FFEE88';
+            ctx.beginPath();
+            ctx.arc(c.x + 5, c.y + 5 + bounce, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        function drawEnemy(e) {
+            // 蘑菇身体
+            ctx.fillStyle = '#CC6600';
+            ctx.beginPath();
+            ctx.arc(e.x + e.w/2, e.y + 10, 14, Math.PI, 0);
+            ctx.fill();
+            
+            // 蘑菇帽子
+            ctx.fillStyle = '#FF0000';
+            ctx.beginPath();
+            ctx.arc(e.x + e.w/2, e.y + 10, 14, Math.PI, 0);
+            ctx.fill();
+            
+            // 斑点
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.arc(e.x + 8, e.y + 4, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(e.x + 18, e.y + 6, 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 脸
+            ctx.fillStyle = '#000';
+            ctx.fillRect(e.x + 8, e.y + 8, 4, 4);
+            ctx.fillRect(e.x + 16, e.y + 8, 4, 4);
+            
+            // 嘴巴
+            ctx.fillRect(e.x + 10, e.y + 16, 8, 2);
+            
+            // 脚
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(e.x + 4, e.y + 22, 8, 6);
+            ctx.fillRect(e.x + 16, e.y + 22, 8, 6);
+        }
+        
+        function drawFlag() {
+            // 旗杆
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(flag.x, flag.y, 6, flag.h);
+            
+            // 旗帜
+            ctx.fillStyle = '#00DD00';
+            ctx.beginPath();
+            ctx.moveTo(flag.x + 6, flag.y);
+            ctx.lineTo(flag.x + 50, flag.y + 20);
+            ctx.lineTo(flag.x + 6, flag.y + 40);
+            ctx.fill();
+            
+            // 球
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(flag.x + 3, flag.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        function drawBackground() {
+            // 天空
+            ctx.fillStyle = '#5C94FC';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 云朵
+            ctx.fillStyle = '#FFFFFF';
+            drawCloud(100, 60, 1);
+            drawCloud(350, 40, 0.8);
+            drawCloud(600, 80, 1.2);
+            
+            // 远处的山
+            ctx.fillStyle = '#006400';
+            drawMountain(0, 400, 200, 150);
+            drawMountain(300, 400, 250, 180);
+            drawMountain(600, 400, 200, 120);
+        }
+        
+        function drawCloud(x, y, scale) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.beginPath();
+            ctx.arc(0, 0, 20, 0, Math.PI * 2);
+            ctx.arc(25, 0, 25, 0, Math.PI * 2);
+            ctx.arc(50, 0, 20, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+        
+        function drawMountain(x, y, w, h) {
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + w/2, y - h);
+            ctx.lineTo(x + w, y);
+            ctx.fill();
+        }
+        
+        function update() {
+            if (gameOver || gameWon) return;
+            
+            // 水平移动
+            if (keys.left) {
+                player.vx = -player.speed;
+                player.facing = -1;
+            } else if (keys.right) {
+                player.vx = player.speed;
+                player.facing = 1;
+            } else {
+                player.vx *= friction;
+            }
+            
+            // 跳跃
+            if (keys.jump && player.grounded) {
+                player.vy = player.jumpPower;
+                player.grounded = false;
+            }
+            
+            // 重力
+            player.vy += gravity;
+            
+            // 应用速度
+            player.x += player.vx;
+            player.y += player.vy;
+            
+            // 边界检测
+            if (player.x < 0) player.x = 0;
+            if (player.x > canvas.width - player.width) player.x = canvas.width - player.width;
+            
+            // 平台碰撞
+            player.grounded = false;
+            for (let p of platforms) {
+                if (player.x + player.width > p.x && 
+                    player.x < p.x + p.w &&
+                    player.y + player.height > p.y &&
+                    player.y + player.height < p.y + p.h + 20 &&
+                    player.vy >= 0) {
+                    player.y = p.y - player.height;
+                    player.vy = 0;
+                    player.grounded = true;
+                }
+            }
+            
+            // 掉落检测
+            if (player.y > canvas.height) {
+                lives--;
+                document.getElementById('lives').textContent = lives;
+                if (lives <= 0) {
+                    gameOver = true;
+                } else {
+                    player.x = 50;
+                    player.y = 300;
+                    player.vx = 0;
+                    player.vy = 0;
+                }
+            }
+            
+            // 金币收集
+            for (let c of coins) {
+                if (!c.collected && 
+                    player.x + player.width > c.x && 
+                    player.x < c.x + 16 &&
+                    player.y + player.height > c.y && 
+                    player.y < c.y + 16) {
+                    c.collected = true;
+                    score += 100;
+                    document.getElementById('score').textContent = score;
+                }
+            }
+            
+            // 敌人移动和碰撞
+            for (let e of enemies) {
+                e.x += e.vx;
+                if (e.x < e.startX || e.x > e.endX) {
+                    e.vx *= -1;
+                }
+                
+                // 碰撞检测
+                if (player.x + player.width > e.x && 
+                    player.x < e.x + e.w &&
+                    player.y + player.height > e.y && 
+                    player.y < e.y + e.h) {
+                    // 踩死敌人
+                    if (player.vy > 0 && player.y + player.height < e.y + e.h/2) {
+                        player.vy = -8;
+                        score += 200;
+                        document.getElementById('score').textContent = score;
+                        // 移除敌人
+                        e.x = -1000;
+                    } else {
+                        // 被敌人撞到
+                        lives--;
+                        document.getElementById('lives').textContent = lives;
+                        if (lives <= 0) {
+                            gameOver = true;
+                        } else {
+                            player.x = 50;
+                            player.y = 300;
+                            player.vx = 0;
+                            player.vy = 0;
+                        }
+                    }
+                }
+            }
+            
+            // 胜利检测
+            if (player.x > flag.x - 20 && player.y > flag.y - 50) {
+                gameWon = true;
+                score += 1000;
+                document.getElementById('score').textContent = score;
+            }
+            
+            // 动画帧
+            player.frameTimer++;
+            if (player.frameTimer > 5) {
+                player.frame++;
+                player.frameTimer = 0;
+            }
+        }
+        
+        function draw() {
+            drawBackground();
+            
+            // 绘制平台
+            for (let p of platforms) {
+                drawPlatform(p);
+            }
+            
+            // 绘制金币
+            for (let c of coins) {
+                drawCoin(c);
+            }
+            
+            // 绘制敌人
+            for (let e of enemies) {
+                if (e.x > 0) drawEnemy(e);
+            }
+            
+            // 绘制旗子
+            drawFlag();
+            
+            // 绘制玩家
+            drawMario(player.x, player.y, player.facing, player.frame);
+            
+            // 游戏结束
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#FF0000';
+                ctx.font = '48px "Press Start Pro", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2);
+                ctx.font = '20px "Press Start Pro", monospace';
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillText('按 R 重新开始', canvas.width/2, canvas.height/2 + 50);
+            }
+            
+            // 胜利
+            if (gameWon) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#FFD700';
+                ctx.font = '48px "Press Start Pro", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('YOU WIN!', canvas.width/2, canvas.height/2);
+                ctx.font = '20px "Press Start Pro", monospace';
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillText('最终分数: ' + score, canvas.width/2, canvas.height/2 + 50);
+                ctx.fillText('按 R 重新开始', canvas.width/2, canvas.height/2 + 90);
+            }
+        }
+        
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // 键盘事件
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+            if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+                keys.jump = true;
+                e.preventDefault();
+            }
+            if ((gameOver || gameWon) && e.code === 'KeyR') {
+                resetGame();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+            if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') keys.jump = false;
+        });
+        
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            gameOver = false;
+            gameWon = false;
+            player.x = 50;
+            player.y = 300;
+            player.vx = 0;
+            player.vy = 0;
+            coins.forEach(c => c.collected = false);
+            enemies.forEach((e, i) => {
+                e.x = [300, 550][i];
+            });
+            document.getElementById('score').textContent = score;
+            document.getElementById('lives').textContent = lives;
+        }
+        
+        // 启动游戏
+        gameLoop();
+    </script>
+</body>
+</html>

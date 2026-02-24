@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>超级马里奥 - 5关卡</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: monospace;
+        }
+        #gameContainer { position: relative; border: 4px solid #fff; }
+        canvas { display: block; background: #5C94FC; }
+        #ui {
+            position: absolute; top: 0; left: 0; right: 0;
+            padding: 10px 20px; display: flex; justify-content: space-between;
+            color: white; font-size: 16px; text-shadow: 2px 2px 0 #000;
+            background: rgba(0,0,0,0.5);
+        }
+        #screens > div {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9); display: none;
+            flex-direction: column; align-items: center; justify-content: center;
+            color: white;
+        }
+        #screens > div.active { display: flex; }
+        button {
+            padding: 15px 30px; font-size: 18px; cursor: pointer;
+            background: #ff0000; color: white; border: none; margin: 10px;
+        }
+        h1 { color: #FFD700; text-shadow: 3px 3px #ff0000; }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="ui">
+            <span>关卡: <span id="level">1</span>/5</span>
+            <span>分数: <span id="score">0</span></span>
+            <span>生命: <span id="lives">3</span></span>
+        </div>
+        <canvas id="c" width="960" height="540"></canvas>
+        <div id="screens">
+            <div id="start" class="active">
+                <h1>超级马里奥</h1>
+                <p>5 关卡完整版</p>
+                <button onclick="startGame()">开始</button>
+            </div>
+            <div id="levelComplete">
+                <h2>关卡完成!</h2>
+                <button onclick="nextLevel()">下一关</button>
+            </div>
+            <div id="gameComplete">
+                <h2>🎉 通关! 🎉</h2>
+                <p>最终分数: <span id="finalScore">0</span></p>
+                <button onclick="restartGame()">重来</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const c = document.getElementById('c');
+    const ctx = c.getContext('2d');
+    
+    let state = 'start', level = 1, score = 0, lives = 3;
+    let player = { x: 50, y: 300, w: 28, h: 32, vx: 0, vy: 0, g: 0.5, grounded: false, f: 1 };
+    let camera = { x: 0 };
+    let platforms = [], coins = [], enemies = [], pipes = [], blocks = [], flag = null;
+    let keys = {};
+    
+    const levels = {
+        1: { name: "草地平原", platforms: [{x:0,y:480,w:1200,h:60},{x:300,y:380,w:100,h:20},{x:500,y:300,w:80,h:20},{x:700,y:380,w:100,h:20},{x:900,y:280,w:80,h:20},{x:1100,y:350,w:200,h:20}], coins: [{x:330,y:340},{x:530,y:260},{x:730,y:340},{x:930,y:240},{x:1150,y:310}], enemies: [{x:400,y:452,vx:-1,s:300,e:500,t:'g'},{x:700,y:452,vx:-1,s:600,e:800,t:'g'},{x:1000,y:452,vx:-1,s:900,e:1100,t:'g'}], pipes: [{x:600,y:420,h:60},{x:850,y:400,h:80}], blocks: [{x:500,y:220,c:'m'},{x:560,y:220,c:'c'}], flag: {x:1400,y:400,h:80} },
+        2: { name: "地下洞穴", platforms: [{x:0,y:480,w:800,h:60},{x:200,y:400,w:80,h:20},{x:350,y:320,w:80,h:20},{x:500,y:400,w:80,h:20},{x:650,y:320,w:80,h:20},{x:850,y:480,w:600,h:60},{x:1000,y:380,w:100,h:20},{x:1200,y:300,w:80,h:20}], coins: [{x:220,y:360},{x:370,y:280},{x:520,y:360},{x:670,y:280},{x:1030,y:340},{x:1230,y:260}], enemies: [{x:300,y:452,vx:-1,s:200,e:400,t:'g'},{x:600,y:452,vx:-1,s:500,e:700,t:'t'},{x:900,y:452,vx:-1,s:800,e:1000,t:'g'},{x:1100,y:452,vx:-1,s:1000,e:1200,t:'t'}], pipes: [{x:450,y:420,h:60}], blocks: [{x:350,y:240,c:'s'},{x:410,y:240,c:'c'}], flag: {x:1450,y:400,h:80} },
+        3: { name: "水上桥梁", platforms: [{x:0,y:480,w:200,h:60},{x:250,y:420,w:60,h:20},{x:350,y:360,w:60,h:20},{x:450,y:300,w:60,h:20},{x:550,y:360,w:60,h:20},{x:650,y:420,w:60,h:20},{x:750,y:480,w:200,h:60},{x:1000,y:480,w:300,h:60},{x:1100,y:380,w:80,h:20},{x:1250,y:300,w:80,h:20}], coins: [{x:265,y:380},{x:365,y:320},{x:465,y:260},{x:565,y:320},{x:665,y:380},{x:1130,y:340},{x:1280,y:260}], enemies: [{x:150,y:452,vx:-1,s:50,e:250,t:'g'},{x:1050,y:452,vx:-1,s:950,e:1150,t:'g'},{x:1150,y:452,vx:-1,s:1100,e:1300,t:'t'}], pipes: [], blocks: [{x:450,y:220,c:'m'},{x:510,y:220,c:'c'}], flag: {x:1500,y:400,h:80} },
+        4: { name: "黑暗工厂", platforms: [{x:0,y:480,w:300,h:60},{x:350,y:420,w:60,h:20},{x:450,y:350,w:60,h:20},{x:550,y:280,w:60,h:20},{x:650,y:350,w:60,h:20},{x:750,y:420,w:60,h:20},{x:850,y:480,w:300,h:60},{x:1200,y:400,w:100,h:20},{x:1350,y:320,w:100,h:20}], coins: [{x:365,y:380},{x:465,y:310},{x:565,y:240},{x:665,y:310},{x:765,y:380},{x:1230,y:360},{x:1380,y:280}], enemies: [{x:100,y:452,vx:-1,s:50,e:200,t:'g'},{x:200,y:452,vx:-1,s:150,e:300,t:'t'},{x:900,y:452,vx:-1,s:800,e:1000,t:'g'},{x:1000,y:452,vx:-1,s:900,e:1100,t:'t'}], pipes: [{x:300,y:420,h:60},{x:1150,y:420,h:60}], blocks: [{x:450,y:200,c:'s'},{x:510,y:200,c:'c'}], flag: {x:1550,y:400,h:80} },
+        5: { name: "城堡外墙", platforms: [{x:0,y:480,w:200,h:60},{x:250,y:420,w:80,h:20},{x:380,y:350,w:80,h:20},{x:510,y:280,w:80,h:20},{x:640,y:350,w:80,h:20},{x:770,y:420,w:80,h:20},{x:900,y:480,w:200,h:60},{x:1150,y:400,w:100,h:20},{x:1300,y:320,w:80,h:20},{x:1450,y:240,w:100,h:20}], coins: [{x:270,y:380},{x:400,y:310},{x:530,y:240},{x:660,y:310},{x:790,y:380},{x:1180,y:360},{x:1330,y:280},{x:1480,y:200}], enemies: [{x:100,y:452,vx:-1,s:50,e:200,t:'g'},{x:300,y:452,vx:-1,s:250,e:400,t:'t'},{x:500,y:452,vx:-1,s:450,e:600,t:'t'},{x:950,y:452,vx:-1,s:900,e:1050,t:'g'},{x:1100,y:452,vx:-1,s:1050,e:1200,t:'t'}], pipes: [], blocks: [{x:380,y:180,c:'m'},{x:440,y:180,c:'s'},{x:470,y:180,c:'c'}], flag: {x:1600,y:400,h:80} }
+    };
+    
+    function loadLevel(l) {
+        const d = levels[l];
+        platforms = d.platforms;
+        coins = d.coins.map(c => ({...c, col: false}));
+        enemies = d.enemies.map(e => ({...e, dead: false}));
+        pipes = d.pipes;
+        blocks = d.blocks.map(b => ({...b, hit: false}));
+        flag = d.flag;
+        player.x = 50; player.y = 300; player.vx = 0; player.vy = 0;
+        camera.x = 0;
+    }
+    
+    function drawBg() {
+        const g = ctx.createLinearGradient(0,0,0,c.height);
+        if(level==2) { g.addColorStop(0,'#1a1a1a'); g.addColorStop(1,'#2d2d2d'); }
+        else if(level==4) { g.addColorStop(0,'#2d1a1a'); g.addColorStop(1,'#4a2d2d'); }
+        else { g.addColorStop(0,'#5C94FC'); g.addColorStop(1,'#3d6bdb'); }
+        ctx.fillStyle = g; ctx.fillRect(0,0,c.width,c.height);
+        if(level!=2) {
+            ctx.fillStyle='rgba(255,255,255,0.8)';
+            [[100,60,1],[400,40,0.8],[700,80,1.2]].forEach(([x,y,s])=>{ctx.save();ctx.translate(x-camera.x*0.1,y);ctx.scale(s,s);ctx.beginPath();ctx.arc(0,0,25,0,Math.PI*2);ctx.arc(30,0,30,0,Math.PI*2);ctx.arc(60,0,25,0,Math.PI*2);ctx.fill();ctx.restore();});
+            ctx.fillStyle=level==3?'#2d5a27':'#006400';
+            [[0,540,300,200],[400,540,350,250],[900,540,300,180]].forEach(([x,y,w,h])=>{if(x+w>0&&x<c.width){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w/2,y-h);ctx.lineTo(x+w,y);ctx.fill();}});
+        }
+    }
+    
+    function drawP(p) {
+        const x = p.x - camera.x;
+        if(x+p.w<0||x>c.width) return;
+        ctx.fillStyle='#00AA00'; ctx.fillRect(x,p.y,p.w,8);
+        ctx.fillStyle='#8B4513'; ctx.fillRect(x,p.y+8,p.w,p.h-8);
+        ctx.fillStyle='#00DD00'; for(let i=0;i<p.w;i+=16) ctx.fillRect(x+i,p.y,12,4);
+    }
+    
+    function drawCoin(c) {
+        if(c.col) return;
+        const x = c.x - camera.x;
+        if(x<-20||x>c.width+20) return;
+        const b = Math.sin(Date.now()/150)*2;
+        ctx.fillStyle='#FFD700'; ctx.beginPath(); ctx.arc(x+8,c.y+8+b,8,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='#FFEE88'; ctx.beginPath(); ctx.arc(x+5,c.y+5+b,3,0,Math.PI*2); ctx.fill();
+    }
+    
+    function drawEnemy(e) {
+        if(e.dead) return;
+        const x = e.x - camera.x;
+        if(x<-30||x>c.width+30) return;
+        if(e.t=='g') {
+            ctx.fillStyle='#CC6600'; ctx.beginPath(); ctx.arc(x+14,e.y+12,12,Math.PI,0); ctx.fill();
+            ctx.fillStyle='#8B4513'; ctx.beginPath(); ctx.arc(x+14,e.y+12,14,Math.PI,0); ctx.fill();
+            ctx.fillStyle='#FFF'; ctx.beginPath(); ctx.arc(x+8,e.y+6,3,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#000'; ctx.fillRect(x+8,e.y+10,4,4); ctx.fillRect(x+16,e.y+10,4,4); ctx.fillRect(x+10,e.y+18,8,2);
+        } else {
+            ctx.fillStyle='#006400'; ctx.beginPath(); ctx.arc(x+16,e.y+14,14,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#00AA00'; ctx.beginPath(); ctx.arc(x+16,e.y+14,10,0,Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x+28,e.y+8,8,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#000'; ctx.fillRect(x+26,e.y+6,3,3); ctx.fillRect(x+32,e.y+6,3,3);
+        }
+    }
+    
+    function drawPipe(p) {
+        const x = p.x - camera.x;
+        if(x+50<0||x>c.width) return;
+        ctx.fillStyle='#00AA00'; ctx.fillRect(x,p.y,50,p.h);
+        ctx.fillStyle='#00DD00'; ctx.fillRect(x-5,p.y-10,60,20);
+    }
+    
+    function drawBlock(b) {
+        if(b.hit) return;
+        const x = b.x - camera.x;
+        if(x+30<0||x>c.width) return;
+        ctx.fillStyle='#B8860B'; ctx.fillRect(x,b.y,30,30);
+        ctx.fillStyle='#FFD700'; ctx.font='20px monospace'; ctx.textAlign='center'; ctx.fillText('?',x+15,b.y+22);
+    }
+    
+    function drawFlag() {
+        if(!flag) return;
+        const x = flag.x - camera.x;
+        if(x<-50||x>c.width+50) return;
+        ctx.fillStyle='#8B4513'; ctx.fillRect(x,flag.y,8,flag.h);
+        const w = Math.sin(Date.now()/200)*5;
+        ctx.fillStyle='#00DD00'; ctx.beginPath(); ctx.moveTo(x+8,flag.y+10); ctx.lineTo(x+60+w,flag.y+30); ctx.lineTo(x+8,flag.y+50); ctx.fill();
+        ctx.fillStyle='#FFD700'; ctx.beginPath(); ctx.arc(x+4,flag.y,8,0,Math.PI*2); ctx.fill();
+        if(level==5) {
+            ctx.fillStyle='#8B0000'; ctx.fillRect(x-30,flag.y-60,70,80);
+            ctx.fillRect(x-30,flag.y-75,15,15); ctx.fillRect(x-10,flag.y-75,15,15); ctx.fillRect(x+15,flag.y-75,15,15);
+            ctx.fillStyle='#4a0000'; ctx.fillRect(x-10,flag.y-20,30,40);
+        }
+    }
+    
+    function drawMario() {
+        const {x,y,f} = player;
+        ctx.save(); ctx.translate(x+14,y); ctx.scale(f,1); ctx.translate(-14,0);
+        ctx.fillStyle='#E70012'; ctx.fillRect(4,8,20,16); ctx.fillRect(6,0,16,12);
+        ctx.fillStyle='#0044BD'; ctx.fillRect(4,0,20,4); ctx.fillRect(2,4,4,4);
+        ctx.fillStyle='#FFCC99'; ctx.fillRect(8,4,12,8);
+        ctx.fillStyle='#000'; ctx.fillRect(14,6,3,3);
+        ctx.fillStyle='#FFCC99'; ctx.fillRect(18,8,3,3);
+        ctx.fillStyle='#0044BD'; ctx.fillRect(6,20,16,12);
+        ctx.fillStyle='#0033AD'; ctx.fillRect(8,20,3,12); ctx.fillRect(17,20,3,12);
+        ctx.fillStyle='#FFCC00'; ctx.fillRect(10,22,3,3); ctx.fillRect(15,22,3,3);
+        ctx.fillStyle='#0044BD';
+        const w = Math.floor(Date.now()/200)%2;
+        ctx.fillRect(6,32,6,4); ctx.fillRect(16,32,6,4);
+        ctx.restore();
+    }
+    
+    function update() {
+        if(state!='playing') return;
+        
+        if(keys['ArrowLeft']||keys['a']) { player.vx=-5; player.f=-1; }
+        else if(keys['ArrowRight']||keys['d']) { player.vx=5; player.f=1; }
+        else player.vx*=0.85;
+        
+        if((keys[' ']||keys['ArrowUp']||keys['w'])&&player.grounded) { player.vy=-13; player.grounded=false; }
+        
+        player.vy+=player.g;
+        player.x+=player.vx;
+        player.y+=player.vy;
+        if(player.x<0) player.x=0;
+        
+        player.grounded=false;
+        for(let p of platforms) {
+            if(player.x+player.w>p.x && player.x<p.x+p.w && player.y+player.h>p.y && player.y+player.h<p.y+p.h+15 && player.vy>=0) {
+                player.y=p.y-player.h; player.vy=0; player.grounded=true;
+            }
+        }
+        
+        if(player.y>c.height) { lives--; document.getElementById('lives').innerText=lives; if(lives<=0) {state='start'; document.getElementById('start').classList.add('active');} else {loadLevel(level); player.x=50; player.y=300;} }
+        
+        for(let c of coins) {
+            if(!c.col && player.x+player.w>c.x && player.x<c.x+16 && player.y+player.h>c.y && player.y<c.y+16) {
+                c.col=true; score+=100; document.getElementById('score').innerText=score;
+            }
+        }
+        
+        for(let e of enemies) {
+            if(e.dead) continue;
+            e.x+=e.vx;
+            if(e.x<e.s||e.x>e.e) e.vx*=-1;
+            if(player.x+player.w>e.x && player.x<e.x+28 && player.y+player.h>e.y && player.y<e.y+28) {
+                if(player.vy>0 && player.y+player.h<e.y+20) { player.vy=-8; e.dead=true; score+=200; document.getElementById('score').innerText=score; }
+                else { lives--; document.getElementById('lives').innerText=lives; if(lives<=0) {state='start'; document.getElementById('start').classList.add('active');} else {loadLevel(level); player.x=50; player.y=300;} }
+            }
+        }
+        
+        for(let b of blocks) {
+            if(b.hit) continue;
+            if(player.x+player.w>b.x && player.x<b.x+30 && player.y+player.h>b.y && player.y<b.y+30 && player.vy<0) {
+                b.hit=true; player.vy=5;
+                if(b.c=='c') score+=50;
+                else if(b.c=='s') { player.invincible=true; setTimeout(()=>player.invincible=false,10000); }
+                document.getElementById('score').innerText=score;
+            }
+        }
+        
+        if(flag && player.x>flag.x-20 && player.y>flag.y-50) {
+            score+=1000;
+            document.getElementById('score').innerText=score;
+            if(level==5) { state='gameComplete'; document.getElementById('finalScore').innerText=score; document.getElementById('gameComplete').style.display='flex'; }
+            else { state='levelComplete'; document.getElementById('levelScore').innerText=score; document.getElementById('levelComplete').style.display='flex'; }
+        }
+        
+        camera.x = Math.max(0, player.x - 300);
+    }
+    
+    function draw() {
+        drawBg();
+        platforms.forEach(drawP);
+        coins.forEach(drawCoin);
+        enemies.forEach(drawEnemy);
+        pipes.forEach(drawPipe);
+        blocks.forEach(drawBlock);
+        drawFlag();
+        drawMario();
+    }
+    
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+    
+    function startGame() {
+        document.querySelectorAll('#screens>div').forEach(d=>d.classList.remove('active'));
+        document.getElementById('start').classList.remove('active');
+        document.getElementById('start').style.display='none';
+        document.getElementById('levelComplete').style.display='none';
+        document.getElementById('gameComplete').style.display='none';
+        level=1; score=0; lives=3;
+        document.getElementById('level').innerText=level;
+        document.getElementById('score').innerText=score;
+        document.getElementById('lives').innerText=lives;
+        loadLevel(level);
+        state='playing';
+    }
+    
+    function nextLevel() {
+        document.getElementById('levelComplete').style.display='none';
+        level++;
+        document.getElementById('level').innerText=level;
+        loadLevel(level);
+        state='playing';
+    }
+    
+    function restartGame() {
+        document.getElementById('gameComplete').style.display='none';
+        startGame();
+    }
+    
+    document.addEventListener('keydown',e=>{keys[e.key]=true; if([' ','ArrowUp','ArrowDown'].includes(e.key)) e.preventDefault();});
+    document.addEventListener('keyup',e=>keys[e.key]=false);
+    
+    loop();
+    </script>
+</body>
+</html>
